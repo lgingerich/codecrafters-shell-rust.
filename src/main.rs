@@ -4,7 +4,6 @@ use std::io::{self, Write};
 fn main() {
     // Wait for user input
     let stdin = io::stdin();
-    let mut input = String::new();
 
     loop {
         // Print the prompt
@@ -12,12 +11,17 @@ fn main() {
         io::stdout().flush().unwrap();
 
         // Read the input
+        let mut input = String::new();
         stdin.read_line(&mut input).unwrap();
 
-        // Print the input
-        println!("{}: command not found", input.trim());
+        let command = input.trim();
+        handle_command(command);        
+    }
+}
 
-        // Clear the input
-        input = String::new();
+fn handle_command(command: &str) {
+    match command {
+        "exit 0" => std::process::exit(0),
+        _ => println!("{}: command not found", command),
     }
 }
