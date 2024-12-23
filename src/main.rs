@@ -23,8 +23,8 @@ fn main() {
 }
 
 fn handle_input(input: &str) {
-    let command  = input.trim().split_whitespace().next().unwrap();
-    let args = input.trim().split_whitespace().skip(1).collect::<Vec<_>>();
+    let command  = input.split_whitespace().next().unwrap();
+    let args = input.split_whitespace().skip(1).collect::<Vec<_>>();
 
     match command {
         "exit" => std::process::exit(0),
