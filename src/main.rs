@@ -1,5 +1,4 @@
 use anyhow::Result;
-#[allow(unused_imports)]
 use std::io::{self, Write};
 use std::path::PathBuf;
 
@@ -15,6 +14,7 @@ pub struct Shell {
     stdin: io::Stdin,
     stdout: io::Stdout,
     path: Vec<String>,
+    current_dir: PathBuf,
 }
 
 #[derive(Debug)]
@@ -45,15 +45,16 @@ impl Command {
 }
 
 impl Shell {
-    fn new() -> Self {
-        Self {
+    fn new() -> Result<Self> {
+        Ok(Self {
             stdin: io::stdin(),
             stdout: io::stdout(),
-            path: Self::load_path(),
-        }
+            path: Self::get_path(),
+            current_dir: Shell::get_current_dir()?
+        })
     }
 
-    fn load_path() -> Vec<String> {
+    fn get_path() -> Vec<String> {
         let path = std::env::var("PATH");
         match path {
             Ok(path) => path
@@ -61,6 +62,14 @@ impl Shell {
                 .map(|e| e.to_string())
                 .collect::<Vec<String>>(),
             Err(_) => Vec::default(),
+        }
+    }
+
+    fn get_current_dir() -> Result<PathBuf> {
+        let current_path = std::env::current_dir();
+        match current_path {
+            Ok(path) => Ok(path),
+            Err(_) => Ok(PathBuf::default())
         }
     }
 
@@ -99,12 +108,31 @@ impl Shell {
     fn exec_builtin(&mut self, builtin: Builtin, command: &Command) -> Result<()> {
         match builtin {
             Builtin::CD => {
-                // let new_path = std::env::set_current_dir(command.args[0].as_str());
-                match std::env::set_current_dir(command.args[0].as_str()) {
-                    Ok(_) => Ok(()),
-                    Err(_) => {
-                        println!("cd: {}: No such file or directory", command.args[0]);
+                let cmd = &command.args[0];
+                match cmd.starts_with('.') {
+                    // Move relative path
+                    true => {
+                        for part in cmd.split('/') {
+                            match part {
+                                "."  => continue, // Single dot (.) — stay in current directory
+                                ".." => { self.current_dir.pop(); }, // Double dot (.) — move up one directory. Wrap in braces to return `()`.
+                                ""   => continue, // Handle consecutive slashes
+                                dir => self.current_dir.push(dir)
+                            }
+                        }
+                        std::env::set_current_dir(&self.current_dir)?;
                         Ok(())
+                    },
+                    // Move absolute path
+                    false => {
+                        let new_dir = PathBuf::from(cmd);
+                        if std::env::set_current_dir(&new_dir).is_ok() {
+                            self.current_dir = new_dir;
+                            Ok(())
+                        } else {
+                            println!("cd: {}: No such file or directory", cmd);
+                            Ok(())
+                        }
                     }
                 }
             }
@@ -114,8 +142,7 @@ impl Shell {
             }
             Builtin::EXIT => std::process::exit(0),
             Builtin::PWD => {
-                let current_path = std::env::current_dir()?;
-                println!("{}", current_path.display());
+                println!("{}", self.current_dir.display());
                 Ok(())
             }
             Builtin::TYPE => {
@@ -148,6 +175,5 @@ impl Shell {
 }
 
 fn main() -> Result<()> {
-    let mut shell = Shell::new();
-    shell.run()
+    Shell::new()?.run()
 }
