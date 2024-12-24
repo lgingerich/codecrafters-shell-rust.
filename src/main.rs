@@ -1,81 +1,133 @@
+use anyhow::Result;
 #[allow(unused_imports)]
 use std::io::{self, Write};
+use std::path::PathBuf;
 
-fn main() {
-    // Wait for user input
-    let stdin = io::stdin();
+pub enum Builtin {
+    Echo,
+    Exit,
+    Type,
+}
 
-    // Define valid commands
-    let valid_commands = vec!["echo", "exit", "ls", "type"];
+pub struct Shell {
+    stdin: io::Stdin,
+    stdout: io::Stdout,
+    path: Vec<String>,
+}
 
-    loop {
-        // Print the prompt
-        print!("$ ");
-        io::stdout().flush().unwrap();
+pub struct Command {
+    name: String,
+    args: Vec<String>,
+}
 
-        // Read the input
-        let mut input = String::new();
-        stdin.read_line(&mut input).unwrap();
-
-        // let path = std::env::var("PATH").unwrap()
-        //     .split(':')
-        //     .for_each(|dir| println!("{dir}"));
-
-        // println!("{:?}", path);
-
-        // Parse and handle input
-        handle_input(&input, &valid_commands);
+fn is_builtin(name: &str) -> Option<Builtin> {
+    match name {
+        "echo" => Some(Builtin::Echo),
+        "exit" => Some(Builtin::Exit),
+        "type" => Some(Builtin::Type),
+        _ => None,
     }
 }
 
-fn handle_input(input: &str, valid_commands: &[&str]) {
-    let command  = input.split_whitespace().next().unwrap();
-    let args = input.split_whitespace().skip(1).collect::<Vec<_>>();
-
-    match command {
-        "exit" => std::process::exit(0),
-        "echo" => println!("{}", args.join(" ")),
-        "type" => {
-            if args.len() != 1 {
-                println!("{}: command not found", command);
-                return;
-            }
-
-            let cmd = args[0];
-
-            // Check for valid builtins
-            if valid_commands.contains(&cmd) {
-                println!("{} is a shell builtin", cmd);
-                return;
-            }
-
-            // Search PATH for executable
-            if let Ok(path) = std::env::var("PATH") {
-                for dir in path.split(':') {
-                    let cmd_path = format!("{}/{}", dir, cmd);
-                    if std::path::Path::new(&cmd_path).exists() {
-                        println!("{} is {}", cmd, cmd_path);
-                        return;
-                    }
-                }
-            }
-            
-            println!("{}: not found", cmd);
+impl Command {
+    fn new(input: String) -> Self {
+        let mut parts = input.split_whitespace();
+        Self {
+            name: parts.next().unwrap_or("").to_string(),
+            args: parts.map(String::from).collect(),
         }
-        _ => println!("{}: command not found", command),
     }
-            // match args.len() {
-            //     2.. => println!("{}: command not found", command),
-            //     1 => match valid_commands.contains(&args[0]) {
-            //         true => match args[0] {
-            //             "ls" => println!("{} is {}", args[0], std::env::var("PATH").unwrap_or_default()),
-            //             _ => println!("{} is a shell builtin", args[0])
-            //         },
-            //         false => println!("{}: not found", args[0]),
-            //     },
-            //     _ => (),
-            // }
-        // },
-        // _ => println!("{}: command not found", command),
-    // }
+}
+
+impl Shell {
+    fn new() -> Self {
+        Self {
+            stdin: io::stdin(),
+            stdout: io::stdout(),
+            path: Self::load_path(),
+        }
+    }
+
+    fn load_path() -> Vec<String> {
+        let path = std::env::var("PATH");
+        match path {
+            Ok(path) => path
+                .split(':')
+                .map(|e| e.to_string())
+                .collect::<Vec<String>>(),
+            Err(_) => Vec::default(),
+        }
+    }
+
+    fn in_path(&self, name: &str) -> Option<PathBuf> {
+        self.path
+            .iter()
+            .map(|entry| PathBuf::from(entry).join(name))
+            .find(|path| path.exists())
+    }
+
+    fn run(&mut self) -> Result<()> {
+        loop {
+            print!("$ ");
+            self.stdout.flush()?;
+
+            let mut input = String::new();
+            self.stdin.read_line(&mut input)?;
+
+            let command = Command::new(input);
+            self.exec(command)?;
+        }
+    }
+
+    fn exec(&mut self, command: Command) -> Result<()> {
+        if let Some(builtin) = is_builtin(&command.name) {
+            self.exec_builtin(builtin, &command)?;
+        } else {
+            self.exec_program(&command)?;
+        };
+
+        self.stdout.flush()?;
+
+        Ok(())
+    }
+
+    fn exec_builtin(&mut self, builtin: Builtin, command: &Command) -> Result<()> {
+        match builtin {
+            Builtin::Echo => {
+                println!("{}", command.args.join(" "));
+                Ok(())
+            }
+            Builtin::Exit => std::process::exit(0),
+            Builtin::Type => {
+                let arg = &command.args[0];
+                let message = match is_builtin(arg) {
+                    Some(_) => format!("{} is a shell builtin", arg),
+                    None => match self.in_path(arg) {
+                        Some(entry) => format!("{} is {}", arg, entry.display()),
+                        None => format!("{}: not found", arg),
+                    },
+                };
+                println!("{}", message);
+                Ok(())
+            }
+        }
+    }
+
+    fn exec_program(&mut self, command: &Command) -> Result<()> {
+        match self.in_path(&command.name) {
+            Some(entry) => {
+                let proc = std::process::Command::new(entry)
+                    .args(&command.args)
+                    .output()?;
+                self.stdout.write_all(&proc.stdout)?;
+            }
+            None => println!("{}: command not found", command.name),
+        }
+        Ok(())
+    }
+}
+
+fn main() -> Result<()> {
+    let mut shell = Shell::new();
+    shell.run()
 }
