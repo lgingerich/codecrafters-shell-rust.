@@ -26,10 +26,10 @@ pub struct Command {
 
 fn is_builtin(name: &str) -> Option<Builtin> {
     match name {
-        "cd"   => Some(Builtin::CD),
+        "cd" => Some(Builtin::CD),
         "echo" => Some(Builtin::ECHO),
         "exit" => Some(Builtin::EXIT),
-        "pwd"  => Some(Builtin::PWD),
+        "pwd" => Some(Builtin::PWD),
         "type" => Some(Builtin::TYPE),
         _ => None,
     }
@@ -37,10 +37,28 @@ fn is_builtin(name: &str) -> Option<Builtin> {
 
 impl Command {
     fn new(input: String) -> Self {
-        let mut parts = input.split_whitespace();
+        let mut split = input.splitn(2, ' ');
+        let first = split.next().unwrap_or("").trim().to_string();
+        let rest = split.next();
+
+        let args = rest.map_or(Vec::new(), |s| {
+            let mut in_quotes = false;
+            s.split(|c| {
+                if c == '\'' {
+                    in_quotes = !in_quotes;
+                    false
+                } else {
+                    !in_quotes && c == ' '
+                }
+            })
+            .filter(|s| !s.is_empty())
+            .map(|s| s.trim().replace('\'', "").to_string())
+            .collect()
+        });
+
         Self {
-            name: parts.next().unwrap_or("").to_string(),
-            args: parts.map(String::from).collect(),
+            name: first,
+            args,
         }
     }
 }
@@ -52,7 +70,7 @@ impl Shell {
             stdout: io::stdout(),
             path: Self::get_path(),
             home: Self::get_home(),
-            current_dir: Shell::get_current_dir()?
+            current_dir: Shell::get_current_dir()?,
         })
     }
 
@@ -71,13 +89,13 @@ impl Shell {
         std::env::var("HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("/"))
-     }
+    }
 
     fn get_current_dir() -> Result<PathBuf> {
         let current_path = std::env::current_dir();
         match current_path {
             Ok(path) => Ok(path),
-            Err(_) => Ok(PathBuf::default())
+            Err(_) => Ok(PathBuf::default()),
         }
     }
 
@@ -97,6 +115,7 @@ impl Shell {
             self.stdin.read_line(&mut input)?;
 
             let command = Command::new(input);
+            // println!("Command: {:?}", command);
             self.exec(command)?;
         }
     }
@@ -119,7 +138,7 @@ impl Shell {
                 let cmd = &command.args[0];
 
                 if cmd.starts_with('~') {
-                // Handle home directory navigation
+                    // Handle home directory navigation
                     if cmd == "~" {
                         let home_path = PathBuf::from(&self.home);
                         std::env::set_current_dir(&home_path)?;
@@ -130,19 +149,21 @@ impl Shell {
                         Ok(())
                     }
                 } else if cmd.starts_with('.') {
-                // Handle relative path navigation
+                    // Handle relative path navigation
                     for part in cmd.split('/') {
                         match part {
-                            "."  => continue, // Single dot (.) — stay in current directory
-                            ".." => { self.current_dir.pop(); }, // Double dot (.) — move up one directory. Wrap in braces to return `()`.
-                            ""   => continue, // Handle consecutive slashes
-                            dir => self.current_dir.push(dir)
+                            "." => continue, // Single dot (.) — stay in current directory
+                            ".." => {
+                                self.current_dir.pop();
+                            } // Double dot (.) — move up one directory. Wrap in braces to return `()`.
+                            "" => continue, // Handle consecutive slashes
+                            dir => self.current_dir.push(dir),
                         }
                     }
                     std::env::set_current_dir(&self.current_dir)?;
                     Ok(())
                 } else {
-                // Handle absolute path navigation
+                    // Handle absolute path navigation
                     let new_dir = PathBuf::from(cmd);
                     if std::env::set_current_dir(&new_dir).is_ok() {
                         self.current_dir = new_dir;
