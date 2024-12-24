@@ -4,6 +4,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 
 pub enum Builtin {
+    Cd,
     Echo,
     Exit,
     Pwd,
@@ -16,6 +17,7 @@ pub struct Shell {
     path: Vec<String>,
 }
 
+#[derive(Debug)]
 pub struct Command {
     name: String,
     args: Vec<String>,
@@ -23,6 +25,7 @@ pub struct Command {
 
 fn is_builtin(name: &str) -> Option<Builtin> {
     match name {
+        "cd"   => Some(Builtin::Cd),
         "echo" => Some(Builtin::Echo),
         "exit" => Some(Builtin::Exit),
         "pwd"  => Some(Builtin::Pwd),
@@ -95,6 +98,16 @@ impl Shell {
 
     fn exec_builtin(&mut self, builtin: Builtin, command: &Command) -> Result<()> {
         match builtin {
+            Builtin::Cd => {
+                // let new_path = std::env::set_current_dir(command.args[0].as_str());
+                match std::env::set_current_dir(command.args[0].as_str()) {
+                    Ok(_) => Ok(()),
+                    Err(_) => {
+                        println!("cd: {}: No such file or directory", command.args[0]);
+                        Ok(())
+                    }
+                }
+            }
             Builtin::Echo => {
                 println!("{}", command.args.join(" "));
                 Ok(())
