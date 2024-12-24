@@ -6,6 +6,7 @@ use std::path::PathBuf;
 pub enum Builtin {
     Echo,
     Exit,
+    Pwd,
     Type,
 }
 
@@ -24,6 +25,7 @@ fn is_builtin(name: &str) -> Option<Builtin> {
     match name {
         "echo" => Some(Builtin::Echo),
         "exit" => Some(Builtin::Exit),
+        "pwd"  => Some(Builtin::Pwd),
         "type" => Some(Builtin::Type),
         _ => None,
     }
@@ -98,6 +100,11 @@ impl Shell {
                 Ok(())
             }
             Builtin::Exit => std::process::exit(0),
+            Builtin::Pwd => {
+                let current_path = std::env::current_dir()?;
+                println!("{}", current_path.display());
+                Ok(())
+            }
             Builtin::Type => {
                 let arg = &command.args[0];
                 let message = match is_builtin(arg) {
