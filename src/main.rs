@@ -42,24 +42,26 @@ impl Command {
         let rest = split.next();
 
         let args = rest.map_or(Vec::new(), |s| {
-            let mut in_quotes = false;
-            s.split(|c| {
-                if c == '\'' {
-                    in_quotes = !in_quotes;
+            let mut in_single = false;
+            let mut in_double = false;
+            s.split(|c| match c {
+                '\'' if !in_double => {
+                    in_single = !in_single;
                     false
-                } else {
-                    !in_quotes && c == ' '
                 }
+                '"' if !in_single => {
+                    in_double = !in_double;
+                    false
+                }
+                ' ' if !in_single && !in_double => true,
+                _ => false,
             })
             .filter(|s| !s.is_empty())
-            .map(|s| s.trim().replace('\'', "").to_string())
+            .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string())
             .collect()
         });
 
-        Self {
-            name: first,
-            args,
-        }
+        Self { name: first, args }
     }
 }
 
