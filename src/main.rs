@@ -14,6 +14,7 @@ pub struct Shell {
     stdin: io::Stdin,
     stdout: io::Stdout,
     path: Vec<String>,
+    home: PathBuf,
     current_dir: PathBuf,
 }
 
@@ -50,6 +51,7 @@ impl Shell {
             stdin: io::stdin(),
             stdout: io::stdout(),
             path: Self::get_path(),
+            home: Self::get_home(),
             current_dir: Shell::get_current_dir()?
         })
     }
@@ -64,6 +66,12 @@ impl Shell {
             Err(_) => Vec::default(),
         }
     }
+
+    fn get_home() -> PathBuf {
+        std::env::var("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/"))
+     }
 
     fn get_current_dir() -> Result<PathBuf> {
         let current_path = std::env::current_dir();
@@ -109,30 +117,39 @@ impl Shell {
         match builtin {
             Builtin::CD => {
                 let cmd = &command.args[0];
-                match cmd.starts_with('.') {
-                    // Move relative path
-                    true => {
-                        for part in cmd.split('/') {
-                            match part {
-                                "."  => continue, // Single dot (.) — stay in current directory
-                                ".." => { self.current_dir.pop(); }, // Double dot (.) — move up one directory. Wrap in braces to return `()`.
-                                ""   => continue, // Handle consecutive slashes
-                                dir => self.current_dir.push(dir)
-                            }
-                        }
-                        std::env::set_current_dir(&self.current_dir)?;
+
+                if cmd.starts_with('~') {
+                // Handle home directory navigation
+                    if cmd == "~" {
+                        let home_path = PathBuf::from(&self.home);
+                        std::env::set_current_dir(&home_path)?;
+                        self.current_dir = home_path;
                         Ok(())
-                    },
-                    // Move absolute path
-                    false => {
-                        let new_dir = PathBuf::from(cmd);
-                        if std::env::set_current_dir(&new_dir).is_ok() {
-                            self.current_dir = new_dir;
-                            Ok(())
-                        } else {
-                            println!("cd: {}: No such file or directory", cmd);
-                            Ok(())
+                    } else {
+                        println!("nulll");
+                        Ok(())
+                    }
+                } else if cmd.starts_with('.') {
+                // Handle relative path navigation
+                    for part in cmd.split('/') {
+                        match part {
+                            "."  => continue, // Single dot (.) — stay in current directory
+                            ".." => { self.current_dir.pop(); }, // Double dot (.) — move up one directory. Wrap in braces to return `()`.
+                            ""   => continue, // Handle consecutive slashes
+                            dir => self.current_dir.push(dir)
                         }
+                    }
+                    std::env::set_current_dir(&self.current_dir)?;
+                    Ok(())
+                } else {
+                // Handle absolute path navigation
+                    let new_dir = PathBuf::from(cmd);
+                    if std::env::set_current_dir(&new_dir).is_ok() {
+                        self.current_dir = new_dir;
+                        Ok(())
+                    } else {
+                        println!("cd: {}: No such file or directory", cmd);
+                        Ok(())
                     }
                 }
             }
