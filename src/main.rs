@@ -4,11 +4,11 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 
 pub enum Builtin {
-    Cd,
-    Echo,
-    Exit,
-    Pwd,
-    Type,
+    CD,
+    ECHO,
+    EXIT,
+    PWD,
+    TYPE,
 }
 
 pub struct Shell {
@@ -25,11 +25,11 @@ pub struct Command {
 
 fn is_builtin(name: &str) -> Option<Builtin> {
     match name {
-        "cd"   => Some(Builtin::Cd),
-        "echo" => Some(Builtin::Echo),
-        "exit" => Some(Builtin::Exit),
-        "pwd"  => Some(Builtin::Pwd),
-        "type" => Some(Builtin::Type),
+        "cd"   => Some(Builtin::CD),
+        "echo" => Some(Builtin::ECHO),
+        "exit" => Some(Builtin::EXIT),
+        "pwd"  => Some(Builtin::PWD),
+        "type" => Some(Builtin::TYPE),
         _ => None,
     }
 }
@@ -98,7 +98,7 @@ impl Shell {
 
     fn exec_builtin(&mut self, builtin: Builtin, command: &Command) -> Result<()> {
         match builtin {
-            Builtin::Cd => {
+            Builtin::CD => {
                 // let new_path = std::env::set_current_dir(command.args[0].as_str());
                 match std::env::set_current_dir(command.args[0].as_str()) {
                     Ok(_) => Ok(()),
@@ -108,17 +108,17 @@ impl Shell {
                     }
                 }
             }
-            Builtin::Echo => {
+            Builtin::ECHO => {
                 println!("{}", command.args.join(" "));
                 Ok(())
             }
-            Builtin::Exit => std::process::exit(0),
-            Builtin::Pwd => {
+            Builtin::EXIT => std::process::exit(0),
+            Builtin::PWD => {
                 let current_path = std::env::current_dir()?;
                 println!("{}", current_path.display());
                 Ok(())
             }
-            Builtin::Type => {
+            Builtin::TYPE => {
                 let arg = &command.args[0];
                 let message = match is_builtin(arg) {
                     Some(_) => format!("{} is a shell builtin", arg),
