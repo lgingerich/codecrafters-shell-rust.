@@ -1,8 +1,11 @@
+#[warn(unused_variables)]
+
+
 use anyhow::Result;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-pub enum Builtin {
+enum Builtin {
     CD,
     ECHO,
     EXIT,
@@ -10,7 +13,7 @@ pub enum Builtin {
     TYPE,
 }
 
-pub struct Shell {
+struct Shell {
     stdin: io::Stdin,
     stdout: io::Stdout,
     path: Vec<String>,
@@ -19,7 +22,7 @@ pub struct Shell {
 }
 
 #[derive(Debug)]
-pub struct Command {
+struct Command {
     name: String,
     args: Vec<String>,
 }
@@ -37,31 +40,65 @@ fn is_builtin(name: &str) -> Option<Builtin> {
 
 impl Command {
     fn new(input: String) -> Self {
-        let mut split = input.splitn(2, ' ');
+        let mut split = input.trim_end().splitn(2, ' ');
         let first = split.next().unwrap_or("").trim().to_string();
-        let rest = split.next();
-
-        let args = rest.map_or(Vec::new(), |s| {
-            let mut in_single = false;
-            let mut in_double = false;
-            s.split(|c| match c {
-                '\'' if !in_double => {
-                    in_single = !in_single;
-                    false
-                }
-                '"' if !in_single => {
-                    in_double = !in_double;
-                    false
-                }
-                ' ' if !in_single && !in_double => true,
-                _ => false,
-            })
-            .filter(|s| !s.is_empty())
-            .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string())
-            .collect()
-        });
-
+        let rest = split.next().map(|s| s.to_string());
+        let args = rest.map_or(Vec::new(), Self::parse_arguments);
         Self { name: first, args }
+    }
+
+    fn parse_arguments(input: String) -> Vec<String> {
+        let mut chars = input.chars().peekable();
+        let mut current = String::new();
+        let mut args = Vec::new();
+        let mut in_single_quotes = false;
+        let mut in_double_quotes = false;
+        let mut escaped = false;
+
+        while let Some(c) = chars.next() {
+            match c {
+                // Backslash handling - treat it as literal in double quotes unless escaping special chars
+                '\\' if !escaped && in_double_quotes => {
+                    if let Some(&next) = chars.peek() {
+                        if next == '\\' || next == '$' || next == '"' || next == '\n' {
+                            escaped = true;
+                        } else {
+                            // If not escaping special char in double quotes, treat as literal
+                            current.push('\\');
+                        }
+                    }
+                }
+                // Backslash outside quotes - always escape next character
+                '\\' if !escaped => {
+                    escaped = true;
+                }
+                // Handle escaped character
+                c if escaped => {
+                    current.push(c);
+                    escaped = false;
+                }
+                // Toggle single quote mode if not in double quotes and not escaped
+                '\'' if !in_double_quotes && !escaped => in_single_quotes = !in_single_quotes,
+                // Toggle double quote mode if not in single quotes and not escaped
+                '"' if !in_single_quotes && !escaped => in_double_quotes = !in_double_quotes,
+                // Space is delimiter only when not in quotes and not escaped
+                ' ' if !in_single_quotes && !in_double_quotes && !escaped => {
+                    if !current.is_empty() {
+                        args.push(current.clone());
+                        current.clear();
+                    }
+                }
+                // Add all other characters literally
+                _ => current.push(c),
+            }
+        }
+    
+        // Push final argument if buffer not empty
+        if !current.is_empty() {
+            args.push(current);
+        }
+    
+        args
     }
 }
 
@@ -119,6 +156,7 @@ impl Shell {
             let command = Command::new(input);
             // println!("Command: {:?}", command);
             self.exec(command)?;
+            self.stdout.flush()?;
         }
     }
 
@@ -147,8 +185,7 @@ impl Shell {
                         self.current_dir = home_path;
                         Ok(())
                     } else {
-                        println!("nulll");
-                        Ok(())
+                        Ok(()) // TODO: What needs to be implemented here?
                     }
                 } else if cmd.starts_with('.') {
                     // Handle relative path navigation
