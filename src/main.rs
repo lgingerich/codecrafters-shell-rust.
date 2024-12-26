@@ -1,16 +1,15 @@
-#[warn(unused_variables)]
-
+#![warn(unused_variables)]
 
 use anyhow::Result;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
 enum Builtin {
-    CD,
-    ECHO,
-    EXIT,
-    PWD,
-    TYPE,
+    Cd,
+    Echo,
+    Exit,
+    Pwd,
+    Type,
 }
 
 struct Shell {
@@ -29,11 +28,11 @@ struct Command {
 
 fn is_builtin(name: &str) -> Option<Builtin> {
     match name {
-        "cd" => Some(Builtin::CD),
-        "echo" => Some(Builtin::ECHO),
-        "exit" => Some(Builtin::EXIT),
-        "pwd" => Some(Builtin::PWD),
-        "type" => Some(Builtin::TYPE),
+        "cd" => Some(Builtin::Cd),
+        "echo" => Some(Builtin::Echo),
+        "exit" => Some(Builtin::Exit),
+        "pwd" => Some(Builtin::Pwd),
+        "type" => Some(Builtin::Type),
         _ => None,
     }
 }
@@ -57,6 +56,13 @@ impl Command {
 
         while let Some(c) = chars.next() {
             match c {
+                // Toggle single quote mode if not in double quotes and not escaped
+                '\'' if !in_double_quotes && !escaped => {
+                    in_single_quotes = !in_single_quotes;
+                    continue; // Skip adding the quote character itself
+                }
+                // Inside single quotes, treat everything literally including backslashes
+                c if in_single_quotes => current.push(c),
                 // Backslash handling - treat it as literal in double quotes unless escaping special chars
                 '\\' if !escaped && in_double_quotes => {
                     if let Some(&next) = chars.peek() {
@@ -77,8 +83,6 @@ impl Command {
                     current.push(c);
                     escaped = false;
                 }
-                // Toggle single quote mode if not in double quotes and not escaped
-                '\'' if !in_double_quotes && !escaped => in_single_quotes = !in_single_quotes,
                 // Toggle double quote mode if not in single quotes and not escaped
                 '"' if !in_single_quotes && !escaped => in_double_quotes = !in_double_quotes,
                 // Space is delimiter only when not in quotes and not escaped
@@ -92,12 +96,12 @@ impl Command {
                 _ => current.push(c),
             }
         }
-    
+
         // Push final argument if buffer not empty
         if !current.is_empty() {
             args.push(current);
         }
-    
+
         args
     }
 }
@@ -174,7 +178,7 @@ impl Shell {
 
     fn exec_builtin(&mut self, builtin: Builtin, command: &Command) -> Result<()> {
         match builtin {
-            Builtin::CD => {
+            Builtin::Cd => {
                 let cmd = &command.args[0];
 
                 if cmd.starts_with('~') {
@@ -213,16 +217,16 @@ impl Shell {
                     }
                 }
             }
-            Builtin::ECHO => {
+            Builtin::Echo => {
                 println!("{}", command.args.join(" "));
                 Ok(())
             }
-            Builtin::EXIT => std::process::exit(0),
-            Builtin::PWD => {
+            Builtin::Exit => std::process::exit(0),
+            Builtin::Pwd => {
                 println!("{}", self.current_dir.display());
                 Ok(())
             }
-            Builtin::TYPE => {
+            Builtin::Type => {
                 let arg = &command.args[0];
                 let message = match is_builtin(arg) {
                     Some(_) => format!("{} is a shell builtin", arg),
