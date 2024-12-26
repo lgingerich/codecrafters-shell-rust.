@@ -1,5 +1,3 @@
-#![warn(unused_variables)]
-
 use anyhow::Result;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -38,16 +36,8 @@ fn is_builtin(name: &str) -> Option<Builtin> {
 }
 
 impl Command {
-    // fn new(input: String) -> Self {
-    //     let mut split = input.trim_end().splitn(2, ' ');
-    //     let first = split.next().unwrap_or("").trim().to_string();
-    //     let rest = split.next().map(|s| s.to_string());
-    //     let args = rest.map_or(Vec::new(), Self::parse_arguments);
-    //     Self { name: first, args }
-    // }
-
     fn new(input: String) -> Self {
-        let parts = Self::parse_arguments(input);
+        let parts = Self::parse_arguments(input.trim_end().to_string());
         let (name, args) = match parts.split_first() {
             Some((name, args)) => (name.to_string(), args.to_vec()),
             None => (String::new(), Vec::new()),
@@ -155,6 +145,13 @@ impl Shell {
     }
 
     fn in_path(&self, name: &str) -> Option<PathBuf> {
+        // First check if it's an absolute path or path with directory components
+        let path = PathBuf::from(name.trim_matches(|c| c == '\'' || c == '"'));
+        if path.is_absolute() || path.components().count() > 1 {
+            return if path.exists() { Some(path) } else { None };
+        }
+
+        // Then check PATH directories
         self.path
             .iter()
             .map(|entry| PathBuf::from(entry).join(name))
@@ -170,9 +167,7 @@ impl Shell {
             self.stdin.read_line(&mut input)?;
 
             let command = Command::new(input);
-            // println!("Command: {:?}", command);
             self.exec(command)?;
-            self.stdout.flush()?;
         }
     }
 
@@ -254,11 +249,24 @@ impl Shell {
     }
 
     fn exec_program(&mut self, command: &Command) -> Result<()> {
+        // Handle empty command name
+        if command.name.is_empty() {
+            return Ok(());
+        }
+
         match self.in_path(&command.name) {
             Some(entry) => {
-                let proc = std::process::Command::new(entry)
-                    .args(&command.args)
+                // Clean up the arguments by trimming newlines
+                let clean_args: Vec<String> = command
+                    .args
+                    .iter()
+                    .map(|arg| arg.trim_end().to_string())
+                    .collect();
+
+                let proc = std::process::Command::new(entry.as_path())
+                    .args(clean_args)
                     .output()?;
+
                 self.stdout.write_all(&proc.stdout)?;
             }
             None => println!("{}: command not found", command.name),
