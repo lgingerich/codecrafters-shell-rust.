@@ -38,12 +38,21 @@ fn is_builtin(name: &str) -> Option<Builtin> {
 }
 
 impl Command {
+    // fn new(input: String) -> Self {
+    //     let mut split = input.trim_end().splitn(2, ' ');
+    //     let first = split.next().unwrap_or("").trim().to_string();
+    //     let rest = split.next().map(|s| s.to_string());
+    //     let args = rest.map_or(Vec::new(), Self::parse_arguments);
+    //     Self { name: first, args }
+    // }
+
     fn new(input: String) -> Self {
-        let mut split = input.trim_end().splitn(2, ' ');
-        let first = split.next().unwrap_or("").trim().to_string();
-        let rest = split.next().map(|s| s.to_string());
-        let args = rest.map_or(Vec::new(), Self::parse_arguments);
-        Self { name: first, args }
+        let parts = Self::parse_arguments(input);
+        let (name, args) = match parts.split_first() {
+            Some((name, args)) => (name.to_string(), args.to_vec()),
+            None => (String::new(), Vec::new()),
+        };
+        Self { name, args }
     }
 
     fn parse_arguments(input: String) -> Vec<String> {
