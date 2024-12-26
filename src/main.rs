@@ -78,13 +78,16 @@ impl Command {
                 '\\' if !escaped => {
                     escaped = true;
                 }
+                // Toggle double quote mode if not in single quotes and not escaped
+                '"' if !in_single_quotes && !escaped => {
+                    in_double_quotes = !in_double_quotes;
+                    continue;
+                }
                 // Handle escaped character
                 c if escaped => {
                     current.push(c);
                     escaped = false;
                 }
-                // Toggle double quote mode if not in single quotes and not escaped
-                '"' if !in_single_quotes && !escaped => in_double_quotes = !in_double_quotes,
                 // Space is delimiter only when not in quotes and not escaped
                 ' ' if !in_single_quotes && !in_double_quotes && !escaped => {
                     if !current.is_empty() {
